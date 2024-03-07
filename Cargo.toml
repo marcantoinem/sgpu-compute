@@ -1,0 +1,22 @@
+[package]
+name = "sgpu-compute"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[features]
+default = ["blocking"]
+blocking = ["dep:pollster"]
+
+[dependencies]
+bytemuck = "1.14"
+flume = "0.11.0"
+pollster = { version = "0.3.0", optional = true }
+wgpu = { version = "0.19" }
+
+[dev-dependencies]
+criterion = "0.5"
+
+[[bench]]
+name = "bench"
+harness = false
