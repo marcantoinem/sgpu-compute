@@ -1,4 +1,4 @@
-use crate::{primitive_number::PrimitiveNumber, GpuComputeAsync};
+use crate::GpuComputeAsync;
 
 pub struct GpuCompute(GpuComputeAsync);
 
@@ -11,7 +11,7 @@ impl GpuCompute {
         self.0.change_compute_shader(shader);
     }
 
-    pub fn compute<A: PrimitiveNumber>(&self, inputs: &[A]) -> Vec<A> {
+    pub fn compute<A: Default + bytemuck::Pod>(&self, inputs: &[A]) -> Vec<A> {
         pollster::block_on(self.0.compute(inputs))
     }
 }

@@ -1,9 +1,5 @@
-use primitive_number::PrimitiveNumber;
 use std::borrow::Cow;
 use wgpu::{util::DeviceExt, Device, Queue, ShaderModule};
-
-#[macro_use]
-mod primitive_number;
 
 pub mod blocking;
 
@@ -58,7 +54,10 @@ impl GpuComputeAsync {
             });
     }
 
-    pub async fn compute<A: PrimitiveNumber>(&self, inputs: &[A]) -> Vec<A> {
+    pub async fn compute<A: Default + bytemuck::Pod, B: Default + bytemuck::Pod>(
+        &self,
+        inputs: &[A],
+    ) -> Vec<B> {
         let size = std::mem::size_of_val(inputs) as wgpu::BufferAddress;
         let staging_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
             label: None,
@@ -116,7 +115,7 @@ impl GpuComputeAsync {
         self.device.poll(wgpu::Maintain::wait()).panic_on_timeout();
         if let Ok(Ok(())) = receiver.recv_async().await {
             let data = buffer_slice.get_mapped_range();
-            let result: Vec<A> = bytemuck::cast_slice(&data).to_vec();
+            let result: Vec<B> = bytemuck::cast_slice(&data).to_vec();
             drop(data);
             staging_buffer.unmap();
             result
