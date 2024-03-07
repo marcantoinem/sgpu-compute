@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use wgpu::{util::DeviceExt, Device, Queue, ShaderModule};
 
+#[cfg(feature = "blocking")]
 pub mod blocking;
 
 pub struct GpuComputeAsync {
