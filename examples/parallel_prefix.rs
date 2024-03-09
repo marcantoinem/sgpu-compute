@@ -1,7 +1,5 @@
-use std::num::NonZeroUsize;
-
 use rand::Rng;
-use sgpu_compute::{blocking::GpuCompute, StageDesc};
+use sgpu_compute::prelude::*;
 
 #[derive(Debug, Copy, Clone, bytemuck::Zeroable, bytemuck::Pod)]
 #[repr(C)]
@@ -35,7 +33,7 @@ fn main() {
     let input: [f32; N] = gen();
 
     let gpu = GpuCompute::new();
-    let mut pipeline = gpu.gen_pipeline::<_, Uniform, _, 3>(
+    let mut pipeline = gpu.gen_pipeline(
         NonZeroUsize::new(std::mem::size_of::<f32>() * N_PADDED as usize / PER_WORKER as usize),
         [
             StageDesc {
@@ -58,7 +56,7 @@ fn main() {
     pipeline.write_uniform(&Uniform { width: PER_WORKER });
     let mut input_padded = [0.0; N_PADDED];
     input_padded[..N].copy_from_slice(&input[..]);
-    let result: [f32; N] = pipeline.run_blocking(
+    let result: [f32; N] = pipeline.run(
         &input_padded,
         [(N_WG as _, 1, 1), (1, 1, 1), (N_WG, 1, 1)],
         |vals: &[f32; N_PADDED]| {

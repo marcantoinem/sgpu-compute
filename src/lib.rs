@@ -108,7 +108,7 @@ impl GpuComputeAsync {
 
     /// The input, the uniform and the output must be `bytemuck::Pod` like shown in this small example. The `N` const parameter is the number of stages in the pipeline.
     /// ```rust
-    /// use sgpu_compute::*;
+    /// use sgpu_compute::prelude::*;
     ///
     /// #[derive(Debug, Copy, Clone, bytemuck::Zeroable, bytemuck::Pod)]
     /// #[repr(C)]

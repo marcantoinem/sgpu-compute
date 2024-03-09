@@ -1,28 +1,9 @@
+use crate::normal_distribution::numerical_integration_cpu;
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use rayon::prelude::*;
-use sgpu_compute::{blocking::GpuCompute, StageDesc};
-use std::f32::consts::PI;
+use sgpu_compute::prelude::*;
 
-fn normal_distribution(x: f32) -> f32 {
-    (-0.5 * (x.powi(2))).exp() / (2.0 * PI).sqrt()
-}
-
-fn numerical_integration_cpu_single(born: f32) -> f32 {
-    let mut area = 0.0;
-    let width = born / 32768.0;
-    for i in 0..32768 {
-        let x = i as f32 * width + 0.5 * width;
-        area += width * normal_distribution(x);
-    }
-    0.5 + area
-}
-
-pub fn numerical_integration_cpu(to_integrate: &[f32]) -> Vec<f32> {
-    to_integrate
-        .par_iter()
-        .map(|&x| numerical_integration_cpu_single(x))
-        .collect()
-}
+#[path = "../tests/normal_distribution.rs"] // Forbidden hack to avoid code duplication
+mod normal_distribution;
 
 fn criterion_benchmark(c: &mut Criterion) {
     let gpu_compute = GpuCompute::new();
@@ -47,7 +28,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     c.bench_function("test normal distribution GPU", |b| {
         b.iter(|| {
             let mut output = [0.0; 1000];
-            pipeline.run_blocking(black_box(&input), [(N_WORKGROUP, 1, 1)], |vals| {
+            pipeline.run(black_box(&input), [(N_WORKGROUP, 1, 1)], |vals| {
                 output.copy_from_slice(vals)
             })
         })

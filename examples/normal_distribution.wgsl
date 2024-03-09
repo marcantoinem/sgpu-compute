@@ -8,13 +8,13 @@ struct Uniform {
 
 const pi: f32 = 3.1415926535897932384626433;
 
-/// Done use this to compute the standard normal distribution with mean 0 and variance 1.0
+/// Compute the standard normal distribution with mean 0 and variance 1.0
 fn normal_distribution(x: f32) -> f32 {
     let exponent: f32 = -0.5 * x * x;
     return exp(exponent) / sqrt(2.0 * pi);
 }
 
-/// Done integrate between 0 and x the normal distribution with numerical integration and 32768 rectangles.
+/// Integrate between 0 and x the normal distribution with numerical integration and n_blocks rectangles.
 fn integrate(born: f32) -> f32 {
     let width: f32 = born / f32(cfg.n_block);
     var area: f32 = 0.0;
