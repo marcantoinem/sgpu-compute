@@ -18,6 +18,8 @@ wgpu = { version = "0.19" }
 criterion = "0.5"
 rand = "0.8.5"
 rayon = "1.9"
+pollster = { version = "0.3.0", features = ["macro"] }
+
 
 [[bench]]
 name = "bench"
