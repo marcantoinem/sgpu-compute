@@ -1,7 +1,6 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use rayon::prelude::*;
-use sgpu_compute::{blocking::GpuCompute, StageDesc};
 use std::f32::consts::PI;
+
+use sgpu_compute::{blocking::GpuCompute, StageDesc};
 
 fn normal_distribution(x: f32) -> f32 {
     (-0.5 * (x.powi(2))).exp() / (2.0 * PI).sqrt()
@@ -19,14 +18,18 @@ fn numerical_integration_cpu_single(born: f32) -> f32 {
 
 pub fn numerical_integration_cpu(to_integrate: &[f32]) -> Vec<f32> {
     to_integrate
-        .par_iter()
+        .iter()
         .map(|&x| numerical_integration_cpu_single(x))
         .collect()
 }
 
-fn criterion_benchmark(c: &mut Criterion) {
+#[test]
+fn normal_distribution_compare() {
+    const N: u32 = 1000;
+    const WORKGROUP_SIZE: u32 = 10;
+    const N_WORKGROUP: u32 = N / WORKGROUP_SIZE;
     let gpu_compute = GpuCompute::new();
-    let mut pipeline = gpu_compute.gen_pipeline::<[f32; 1000], u32, [f32; 1000], 1>(
+    let mut pipeline = gpu_compute.gen_pipeline::<[f32; N as usize], u32, [f32; N as usize], 1>(
         None,
         [StageDesc {
             name: Some("norm"),
@@ -34,9 +37,6 @@ fn criterion_benchmark(c: &mut Criterion) {
             entrypoint: "main",
         }],
     );
-    const N: u32 = 1000;
-    const WORKGROUP_SIZE: u32 = 10;
-    const N_WORKGROUP: u32 = N / WORKGROUP_SIZE;
     pipeline.write_uniform(&32768);
     let input: [f32; N as usize] = (0..N)
         .into_iter()
@@ -44,18 +44,11 @@ fn criterion_benchmark(c: &mut Criterion) {
         .collect::<Vec<_>>()
         .try_into()
         .expect("Could not convert vec");
-    c.bench_function("test normal distribution GPU", |b| {
-        b.iter(|| {
-            let mut output = [0.0; 1000];
-            pipeline.run_blocking(black_box(&input), [(N_WORKGROUP, 1, 1)], |vals| {
-                output.copy_from_slice(vals)
-            })
-        })
-    });
-    c.bench_function("test normal distribution CPU", |b| {
-        b.iter(|| numerical_integration_cpu(black_box(&input)))
-    });
+    let cpu = numerical_integration_cpu(&input);
+    pipeline.run_blocking(&input, [(N_WORKGROUP, 1, 1)], |outputs| {
+        assert_eq!(cpu.len(), outputs.len());
+        for (a, b) in outputs.iter().zip(cpu) {
+            assert!((a - b).abs() < 0.00001, "{} != {}", a, b);
+        }
+    })
 }
-
-criterion_group!(benches, criterion_benchmark);
-criterion_main!(benches);

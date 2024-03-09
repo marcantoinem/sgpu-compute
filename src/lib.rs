@@ -122,20 +122,16 @@ impl GpuComputeAsync {
                 count: None,
             })
             .into_iter()
-            .chain(
-                scratchpad
-                    .as_ref()
-                    .map(|_| wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::COMPUTE,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Storage { read_only: false },
-                            has_dynamic_offset: false,
-                            min_binding_size: None,
-                        },
-                        count: None,
-                    }),
-            )
+            .chain(scratchpad.as_ref().map(|_| wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Storage { read_only: false },
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            }))
             .chain(Some(wgpu::BindGroupLayoutEntry {
                 binding: 0,
                 visibility: wgpu::ShaderStages::COMPUTE,
@@ -267,10 +263,22 @@ impl<'a, Input: bytemuck::Pod, Uniform: bytemuck::Pod, Output: bytemuck::Pod, co
         )
     }
 
-    pub fn dbg_print_scratchpad<T: bytemuck::Pod + bytemuck::AnyBitPattern + std::fmt::Debug>(&mut self) {
-        DownloadBuffer::read_buffer(&self.device.device, &self.device.queue, &self.scratchpad.as_ref().expect("No scratchpad").slice(..), |res| {
-            println!("Contents: {:?}", bytemuck::from_bytes::<T>(res.expect("Could not read scratchpad content").as_ref()));
-        })
+    pub fn dbg_print_scratchpad<T: bytemuck::Pod + bytemuck::AnyBitPattern + std::fmt::Debug>(
+        &mut self,
+    ) {
+        DownloadBuffer::read_buffer(
+            &self.device.device,
+            &self.device.queue,
+            &self.scratchpad.as_ref().expect("No scratchpad").slice(..),
+            |res| {
+                println!(
+                    "Contents: {:?}",
+                    bytemuck::from_bytes::<T>(
+                        res.expect("Could not read scratchpad content").as_ref()
+                    )
+                );
+            },
+        )
     }
 
     #[cfg(feature = "blocking")]
@@ -278,7 +286,7 @@ impl<'a, Input: bytemuck::Pod, Uniform: bytemuck::Pod, Output: bytemuck::Pod, co
         &mut self,
         input: &Input,
         workgroups: [(u32, u32, u32); N],
-        callback: impl FnOnce(&Output) -> T + Send + 'static,
+        callback: impl FnOnce(&Output) -> T + Send,
     ) -> T {
         pollster::block_on(self.run(input, workgroups, callback))
     }
@@ -287,7 +295,7 @@ impl<'a, Input: bytemuck::Pod, Uniform: bytemuck::Pod, Output: bytemuck::Pod, co
         &mut self,
         input: &Input,
         workgroups: [(u32, u32, u32); N],
-        callback: impl FnOnce(&Output) -> T + Send + 'static,
+        callback: impl FnOnce(&Output) -> T + Send,
     ) -> T {
         self.device
             .queue
