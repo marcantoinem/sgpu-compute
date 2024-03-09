@@ -1,17 +1,22 @@
-use crate::GpuComputeAsync;
+use crate::*;
 
 pub struct GpuCompute(GpuComputeAsync);
 
 impl GpuCompute {
-    pub fn new(shader: &str) -> Self {
-        Self(pollster::block_on(GpuComputeAsync::new(shader)))
+    pub fn new() -> Self {
+        Self(pollster::block_on(GpuComputeAsync::new()))
     }
 
-    pub fn change_compute_shader(&mut self, shader: &str) {
-        self.0.change_compute_shader(shader);
-    }
-
-    pub fn compute<A: Default + bytemuck::Pod>(&self, inputs: &[A]) -> Vec<A> {
-        pollster::block_on(self.0.compute(inputs))
+    pub fn gen_pipeline<
+        Input: bytemuck::Pod,
+        Uniform: bytemuck::Pod,
+        Output: bytemuck::Pod,
+        const N: usize,
+    >(
+        &self,
+        scratchpad_size: Option<NonZeroUsize>,
+        stages: [StageDesc; N],
+    ) -> Pipeline<Input, Uniform, Output, N> {
+        pollster::block_on(self.0.gen_pipeline(scratchpad_size, stages))
     }
 }
