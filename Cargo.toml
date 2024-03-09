@@ -9,13 +9,14 @@ default = ["blocking"]
 blocking = ["dep:pollster"]
 
 [dependencies]
-bytemuck = "1.14"
+bytemuck = { version = "1.14", features = ["min_const_generics", "derive"] }
 flume = "0.11.0"
 pollster = { version = "0.3.0", optional = true }
 wgpu = { version = "0.19" }
 
 [dev-dependencies]
 criterion = "0.5"
+rand = "0.8.5"
 
 [[bench]]
 name = "bench"
