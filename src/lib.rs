@@ -1,10 +1,61 @@
+//! # SGPU-Compute - **S**imple **GPU**-Compute using WebGPU
+//! This crate aims to provide a simple and easy-to-use interface to run compute shaders with WGPU and WGSL. It is designed to be as simple as possible to use, while still providing a lot of flexibility for performance reason.
+//!
+//! ## Shader buffer
+//! Three buffers are declared by default:
+//!     - `uniform` for the uniform buffer
+//!     - `in` for the input buffer
+//!     - `out` for the output buffer
+//! Their types are inferred from the `run` method. The `scratchpad` buffer is also available, but it is not required.
+//!
+//! ## Example
+//! ```
+//! use sgpu_compute::prelude::*;
+//!
+//! let my_shader = "
+//!    @group(0) @binding(0) var<uniform> coefficient: u32;
+//!    @group(0) @binding(1) var<storage, read> in: array<u32>;
+//!    @group(0) @binding(2) var<storage, read_write> out: array<u32>;
+//!
+//!    @compute
+//!    @workgroup_size(8, 1, 1)
+//!    fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
+//!        out[global_id.x] = coefficient * in[global_id.x];
+//!    }
+//! ";
+//!
+//! const N_ELEMENT: usize = 64;
+//! const WORKGROUP_SIZE: usize = 8;
+//! const N_WORKGROUP: u32 = (N_ELEMENT / WORKGROUP_SIZE) as u32;
+//!
+//! let gpu = GpuCompute::new();
+//! let mut pipeline = gpu.gen_pipeline(
+//!        None,
+//!        [StageDesc {
+//!            name: Some("norm"),
+//!            shader: my_shader,
+//!            entrypoint: "main",
+//!        }],
+//!    );
+//!
+//! const COEFFICIENT: u32 = 42;
+//!
+//! let input: [u32; N_ELEMENT] = std::array::from_fn(|i| i as u32);
+//! pipeline.write_uniform(&COEFFICIENT);
+//! let result_gpu = pipeline.run(&input, [(N_WORKGROUP, 1, 1)], |vals: &[u32; N_ELEMENT]| *vals);
+//! let result_cpu = input.map(|v| v * COEFFICIENT);
+//! assert_eq!(result_gpu, result_cpu);
+//! ```
 use std::{borrow::Cow, marker::PhantomData, num::NonZeroUsize};
 use wgpu::{util::DownloadBuffer, Device, Queue};
 
 #[cfg(feature = "blocking")]
 pub mod blocking;
 
-pub struct Pipeline<
+pub mod prelude;
+
+/// This struct represents a pipeline. It is used to run async compute shaders. To build it use the `gen_pipeline` method of the `GpuComputeAsync` struct.
+pub struct PipelineAsync<
     'a,
     Input: bytemuck::Pod,
     Uniform: bytemuck::Pod,
@@ -29,12 +80,14 @@ pub struct StageDesc {
     pub entrypoint: &'static str,
 }
 
+/// This is the main struct of the library. It is used to create pipelines and run them. It requires an async runtime to work. If you want a blocking version, you can use the `GpuCompute` struct. If you don't use the blocking version disable default features.
 pub struct GpuComputeAsync {
     device: Device,
     queue: Queue,
 }
 
 impl GpuComputeAsync {
+    /// This method is used to create a new instance of the `GpuComputeAsync` struct.
     pub async fn new() -> Self {
         let instance = wgpu::Instance::default();
         let adapter = instance
@@ -62,6 +115,29 @@ impl GpuComputeAsync {
         Self { device, queue }
     }
 
+    /// The input, the uniform and the output must be `bytemuck::Pod` like shown in this small example. The `N` const parameter is the number of stages in the pipeline.
+    /// ```rust
+    /// use sgpu_compute::prelude::*;
+    ///
+    /// #[derive(Debug, Copy, Clone, bytemuck::Zeroable, bytemuck::Pod)]
+    /// #[repr(C)]
+    /// struct Uniform {
+    ///     width: u32,
+    ///     height: u32,
+    /// }
+    /// #[pollster::main]
+    /// async fn main() {
+    ///     let gpu = GpuComputeAsync::new().await;
+    ///     let pipeline = gpu.gen_pipeline::<[f32; 100], Uniform, [f32; 100], 1>( // This is the manual way to specify generics, but it can be inferred most of the times
+    ///         None, // No scratchpad
+    ///         [StageDesc {
+    ///             name: Some("norm"),
+    ///             shader: "@compute @workgroup_size(1) fn main() {}", // See other examples for shader content  
+    ///             entrypoint: "main",
+    ///         }]
+    ///     ).await;
+    /// }
+    /// ```
     pub async fn gen_pipeline<
         Input: bytemuck::Pod,
         Uniform: bytemuck::Pod,
@@ -71,7 +147,7 @@ impl GpuComputeAsync {
         &self,
         scratchpad_size: Option<NonZeroUsize>,
         stages: [StageDesc; N],
-    ) -> Pipeline<Input, Uniform, Output, N> {
+    ) -> PipelineAsync<Input, Uniform, Output, N> {
         let uniform = if std::mem::size_of::<Uniform>() > 0 {
             Some(self.device.create_buffer(&wgpu::BufferDescriptor {
                 label: "Uniform buffer".into(),
@@ -122,20 +198,16 @@ impl GpuComputeAsync {
                 count: None,
             })
             .into_iter()
-            .chain(
-                scratchpad
-                    .as_ref()
-                    .map(|_| wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::COMPUTE,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Storage { read_only: false },
-                            has_dynamic_offset: false,
-                            min_binding_size: None,
-                        },
-                        count: None,
-                    }),
-            )
+            .chain(scratchpad.as_ref().map(|_| wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Storage { read_only: false },
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            }))
             .chain(Some(wgpu::BindGroupLayoutEntry {
                 binding: 0,
                 visibility: wgpu::ShaderStages::COMPUTE,
@@ -241,7 +313,7 @@ impl GpuComputeAsync {
             .try_into()
             .expect("Wrong length?");
 
-        Pipeline {
+        PipelineAsync {
             uniform,
             input,
             scratchpad,
@@ -257,8 +329,10 @@ impl GpuComputeAsync {
 }
 
 impl<'a, Input: bytemuck::Pod, Uniform: bytemuck::Pod, Output: bytemuck::Pod, const N: usize>
-    Pipeline<'a, Input, Uniform, Output, N>
+    PipelineAsync<'a, Input, Uniform, Output, N>
 {
+    /// This method is used to write the uniform buffer. It is useful to change the uniform between runs.
+    #[inline]
     pub fn write_uniform(&mut self, uniform: &Uniform) {
         self.device.queue.write_buffer(
             self.uniform.as_ref().expect("No uniforms"),
@@ -267,27 +341,33 @@ impl<'a, Input: bytemuck::Pod, Uniform: bytemuck::Pod, Output: bytemuck::Pod, co
         )
     }
 
-    pub fn dbg_print_scratchpad<T: bytemuck::Pod + bytemuck::AnyBitPattern + std::fmt::Debug>(&mut self) {
-        DownloadBuffer::read_buffer(&self.device.device, &self.device.queue, &self.scratchpad.as_ref().expect("No scratchpad").slice(..), |res| {
-            println!("Contents: {:?}", bytemuck::from_bytes::<T>(res.expect("Could not read scratchpad content").as_ref()));
-        })
-    }
-
-    #[cfg(feature = "blocking")]
-    pub fn run_blocking<T: Send + 'static>(
+    /// This method is used to print the content of the scratchpad buffer. It is useful for debugging.
+    #[inline]
+    pub fn dbg_print_scratchpad<T: bytemuck::Pod + bytemuck::AnyBitPattern + std::fmt::Debug>(
         &mut self,
-        input: &Input,
-        workgroups: [(u32, u32, u32); N],
-        callback: impl FnOnce(&Output) -> T + Send + 'static,
-    ) -> T {
-        pollster::block_on(self.run(input, workgroups, callback))
+    ) {
+        DownloadBuffer::read_buffer(
+            &self.device.device,
+            &self.device.queue,
+            &self.scratchpad.as_ref().expect("No scratchpad").slice(..),
+            |res| {
+                println!(
+                    "Contents: {:?}",
+                    bytemuck::from_bytes::<T>(
+                        res.expect("Could not read scratchpad content").as_ref()
+                    )
+                );
+            },
+        )
     }
 
+    /// This method is used to run the pipeline. It takes the input buffer, the workgroups and a callback. The callback is used to convert the output buffer to the desired type. It is useful to avoid copying the output buffer.
+    /// If you want to extract the result you can use a callback like `|vals: &[u32; N_ELEMENT]| *vals` and the type of return of the callback will be returned as the return of the `run` function.
     pub async fn run<T: Send + 'static>(
         &mut self,
         input: &Input,
         workgroups: [(u32, u32, u32); N],
-        callback: impl FnOnce(&Output) -> T + Send + 'static,
+        callback: impl FnOnce(&Output) -> T + Send,
     ) -> T {
         self.device
             .queue
