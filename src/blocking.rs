@@ -5,11 +5,13 @@ use std::ops::{Deref, DerefMut};
 pub struct GpuCompute(GpuComputeAsync);
 
 impl GpuCompute {
+    /// Blocking version of `GpuComputeAsync::new`.
     #[inline]
     pub fn new() -> Self {
         Self(pollster::block_on(GpuComputeAsync::new()))
     }
 
+    /// Blocking version of `GpuComputeAsync::gen_pipeline`.
     #[inline]
     pub fn gen_pipeline<
         Input: bytemuck::Pod,
@@ -27,6 +29,22 @@ impl GpuCompute {
     }
 }
 
+impl Deref for GpuCompute {
+    type Target = GpuComputeAsync;
+
+    #[inline]
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for GpuCompute {
+    #[inline]
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
 pub struct Pipeline<
     'a,
     Input: bytemuck::Pod,
@@ -38,6 +56,7 @@ pub struct Pipeline<
 impl<'a, Input: bytemuck::Pod, Uniform: bytemuck::Pod, Output: bytemuck::Pod, const N: usize>
     Pipeline<'a, Input, Uniform, Output, N>
 {
+    /// Blocking version of `PipelineAsync::run`.
     #[inline]
     pub fn run<T: Send + 'static>(
         &mut self,

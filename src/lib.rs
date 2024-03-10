@@ -1,5 +1,13 @@
 //! # SGPU-Compute - **S**imple **GPU**-Compute using WebGPU
 //! This crate aims to provide a simple and easy-to-use interface to run compute shaders with WGPU and WGSL. It is designed to be as simple as possible to use, while still providing a lot of flexibility for performance reason.
+//!
+//! ## Shader buffer
+//! Three buffers are declared by default:
+//!     - `uniform` for the uniform buffer
+//!     - `in` for the input buffer
+//!     - `out` for the output buffer
+//! Their types are inferred from the `run` method. The `scratchpad` buffer is also available, but it is not required.
+//!
 //! ## Example
 //! ```
 //! use sgpu_compute::prelude::*;
@@ -46,7 +54,7 @@ pub mod blocking;
 
 pub mod prelude;
 
-/// This struct represents a pipeline. It is used to run compute shaders.
+/// This struct represents a pipeline. It is used to run async compute shaders. To build it use the `gen_pipeline` method of the `GpuComputeAsync` struct.
 pub struct PipelineAsync<
     'a,
     Input: bytemuck::Pod,
@@ -79,6 +87,7 @@ pub struct GpuComputeAsync {
 }
 
 impl GpuComputeAsync {
+    /// This method is used to create a new instance of the `GpuComputeAsync` struct.
     pub async fn new() -> Self {
         let instance = wgpu::Instance::default();
         let adapter = instance
@@ -322,6 +331,7 @@ impl GpuComputeAsync {
 impl<'a, Input: bytemuck::Pod, Uniform: bytemuck::Pod, Output: bytemuck::Pod, const N: usize>
     PipelineAsync<'a, Input, Uniform, Output, N>
 {
+    /// This method is used to write the uniform buffer. It is useful to change the uniform between runs.
     #[inline]
     pub fn write_uniform(&mut self, uniform: &Uniform) {
         self.device.queue.write_buffer(
@@ -331,6 +341,8 @@ impl<'a, Input: bytemuck::Pod, Uniform: bytemuck::Pod, Output: bytemuck::Pod, co
         )
     }
 
+    /// This method is used to print the content of the scratchpad buffer. It is useful for debugging.
+    #[inline]
     pub fn dbg_print_scratchpad<T: bytemuck::Pod + bytemuck::AnyBitPattern + std::fmt::Debug>(
         &mut self,
     ) {
@@ -349,6 +361,8 @@ impl<'a, Input: bytemuck::Pod, Uniform: bytemuck::Pod, Output: bytemuck::Pod, co
         )
     }
 
+    /// This method is used to run the pipeline. It takes the input buffer, the workgroups and a callback. The callback is used to convert the output buffer to the desired type. It is useful to avoid copying the output buffer.
+    /// If you want to extract the result you can use a callback like `|vals: &[u32; N_ELEMENT]| *vals` and the type of return of the callback will be returned as the return of the `run` function.
     pub async fn run<T: Send + 'static>(
         &mut self,
         input: &Input,
