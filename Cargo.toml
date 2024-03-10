@@ -1,7 +1,12 @@
 [package]
 name = "sgpu-compute"
+description = "Simple GPU-Compute using WebGPU"
 version = "0.1.0"
 edition = "2021"
+license = "MIT"
+repository = "https://github.com/marcantoinem/sgpu-compute"
+readme = "README.md"
+keywords = ["webgpu", "gpu", "compute", "sgpu"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [features]
